@@ -1,0 +1,4 @@
+interface:
+  display_name: "Bug Hunter"
+  short_description: "Deep debugging across full-stack systems"
+  default_prompt: "Use $bug-hunter to trace this failure, find the root cause across files, and propose the smallest reliable fix."

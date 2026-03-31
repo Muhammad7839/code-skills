@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Preflight"
+  short_description: "Conservative Git readiness and branch safety checks"
+  default_prompt: "Use $git-preflight to run a conservative pre-flight safety check before any development work and stop on any unsafe condition."

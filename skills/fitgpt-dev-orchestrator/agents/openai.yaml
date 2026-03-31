@@ -1,0 +1,5 @@
+# UI metadata for the fitgpt-dev-orchestrator skill.
+interface:
+  display_name: "FitGPT Dev Orchestrator"
+  short_description: "Repeatable FitGPT safety, branch, env, and startup orchestrator"
+  default_prompt: "Use $fitgpt-dev-orchestrator to run the full FitGPT operating procedure with required skill-chain checks, branch matrix analysis, env routing validation, local startup probes, debugging triage, and next safe action."

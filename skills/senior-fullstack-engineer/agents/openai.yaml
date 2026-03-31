@@ -1,0 +1,4 @@
+interface:
+  display_name: "Senior Full-Stack Engineer"
+  short_description: "End-to-end app delivery and debugging"
+  default_prompt: "Use $senior-fullstack-engineer to analyze this codebase and implement a minimal production-ready fix across affected layers."

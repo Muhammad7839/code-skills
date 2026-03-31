@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codebase Auditor"
+  short_description: "Repository health, risks, and architecture audit"
+  default_prompt: "Use $codebase-auditor to audit this repository before development and report architecture, security, integration, and reliability risks."

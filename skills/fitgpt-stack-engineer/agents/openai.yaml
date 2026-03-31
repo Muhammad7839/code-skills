@@ -1,0 +1,4 @@
+interface:
+  display_name: "FitGPT Stack Engineer"
+  short_description: "FastAPI plus Android full-stack engineer"
+  default_prompt: "Use $fitgpt-stack-engineer to implement and review a FastAPI backend plus Jetpack Compose Android feature end to end."
