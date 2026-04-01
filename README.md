@@ -10,9 +10,11 @@ Only custom skills are included. Built-in `.system` skills, logs, and temp files
 ## Repository Layout
 - `skills/<skill-name>/`: canonical skill folders to copy or install
 - `manifest.json`: machine-readable catalog for cloud or scripted extraction
+- `install.py`: canonical cross-platform installer for Codex and cloud machines
 - `groups/core.txt`: core system skill list
 - `groups/utility.txt`: utility skill list
-- `install.sh` and `install.ps1`: selective installers for macOS/Linux and Windows
+- `install.sh` and `install.ps1`: thin wrappers around the canonical installer
+- `CLOUD.md`: exact cloud bootstrap instructions and Codex-friendly prompt text
 
 ## Exported Skills
 - bug-hunter
@@ -44,6 +46,23 @@ Only custom skills are included. Built-in `.system` skills, logs, and temp files
 - doc
 
 ## Install
+
+### Any machine with Python
+```bash
+python3 install.py
+```
+
+Install only core skills:
+
+```bash
+python3 install.py core
+```
+
+Install specific skills:
+
+```bash
+python3 install.py fitgpt-dev-orchestrator git-preflight bug-hunter
+```
 
 ### Windows
 ```powershell
@@ -86,6 +105,7 @@ cp -R skills/bug-hunter ~/.codex/skills/
 ```
 
 On a cloud machine, clone the repo and either:
-- run the installer
+- run `python3 install.py <group-or-skill>`
 - copy the needed folders manually
 - read `manifest.json` to automate extraction
+- follow `CLOUD.md` verbatim

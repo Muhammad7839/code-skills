@@ -7,7 +7,19 @@ git clone https://github.com/Muhammad7839/code-skills.git
 cd code-skills
 ```
 
+Preferred install path on any cloud or Linux machine:
+
+```bash
+python3 install.py core
+```
+
 Install all skills:
+
+```bash
+python3 install.py
+```
+
+Install all skills with OS-specific wrappers:
 
 Windows:
 ```powershell
@@ -33,4 +45,4 @@ bash install.sh core
 ```
 
 Manual copy remains available from `skills/<skill-name>/`.
-For scripted cloud bootstrap, read `manifest.json`.
+For scripted cloud bootstrap, use `install.py` or read `manifest.json`.
