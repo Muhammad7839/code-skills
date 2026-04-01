@@ -10,6 +10,8 @@ import re
 import subprocess
 import sys
 import time
+from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib import error as url_error
@@ -20,6 +22,15 @@ LOCAL_FRONTEND_URL = "http://127.0.0.1:3000"
 DEFAULT_PROD_BACKEND = "https://fitgpt-backend-tdiq.onrender.com"
 BRANCH_PROTECTED = "dieuni"
 BACKEND_TARGET = "backend-features"
+CORE_SYSTEM_SKILLS = [
+    "fitgpt-dev-orchestrator",
+    "git-preflight",
+    "codebase-auditor",
+    "bug-hunter",
+    "fitgpt-stack-engineer",
+    "senior-fullstack-engineer",
+]
+UTILITY_SKILLS = ["pdf", "spreadsheet", "sora", "playwright", "doc"]
 
 
 def run_cmd(
@@ -63,6 +74,13 @@ def resolve_repo_root(raw_repo: Optional[str]) -> Path:
     return repo
 
 
+def resolve_codex_home() -> Path:
+    raw = os.environ.get("CODEX_HOME")
+    if raw:
+        return Path(raw).expanduser().resolve()
+    return (Path.home() / ".codex").resolve()
+
+
 def parse_env_file(path: Path) -> Dict[str, str]:
     values: Dict[str, str] = {}
     if not path.exists():
@@ -75,6 +93,127 @@ def parse_env_file(path: Path) -> Dict[str, str]:
         key, val = line.split("=", 1)
         values[key.strip()] = val.strip().strip('"').strip("'")
     return values
+
+
+def parse_log_entry(line: str) -> Optional[Dict[str, str]]:
+    match = re.match(
+        r"- (?P<timestamp>[^|]+)\s+\|\s+action=`(?P<action>[^`]+)`\s+\|\s+status=`(?P<status>[^`]+)`(?:\s+\|\s+details=(?P<details>.*))?$",
+        line.strip(),
+    )
+    if not match:
+        return None
+    return {
+        "timestamp": match.group("timestamp").strip(),
+        "action": match.group("action").strip(),
+        "status": match.group("status").strip(),
+        "details": (match.group("details") or "").strip(),
+    }
+
+
+def read_recent_logs(limit: int = 30) -> Dict[str, object]:
+    codex_home = resolve_codex_home()
+    log_root = codex_home / "skill-logs"
+    summary: Dict[str, object] = {
+        "files": [],
+        "recent_failures": [],
+        "repeated_failures": [],
+        "failure_advice": [],
+    }
+
+    if not log_root.exists():
+        return summary
+
+    files = sorted(log_root.rglob("*.md"))[-limit:]
+    summary["files"] = [str(path) for path in files]
+
+    failure_events: List[Dict[str, str]] = []
+    for path in files:
+        content = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+        skill = ""
+        for line in content:
+            if line.startswith("- Skill:"):
+                skill_match = re.search(r"`([^`]+)`", line)
+                if skill_match:
+                    skill = skill_match.group(1).strip()
+            entry = parse_log_entry(line)
+            if not entry or entry["status"] != "failure":
+                continue
+            failure_events.append(
+                {
+                    "skill": skill or "unknown",
+                    "action": entry["action"],
+                    "timestamp": entry["timestamp"],
+                    "details": entry["details"],
+                    "file": str(path),
+                }
+            )
+
+    summary["recent_failures"] = failure_events[-8:]
+
+    counter = Counter((item["skill"], item["action"]) for item in failure_events)
+    repeated: List[Dict[str, object]] = []
+    for (skill, action), count in counter.items():
+        if count < 2:
+            continue
+        repeated.append(
+            {
+                "skill": skill,
+                "action": action,
+                "count": count,
+                "suggestion": repeated_failure_suggestion(skill, action),
+            }
+        )
+    summary["repeated_failures"] = repeated
+    summary["failure_advice"] = [item["suggestion"] for item in repeated]
+    return summary
+
+
+def repeated_failure_suggestion(skill: str, action: str) -> str:
+    text = f"{skill} {action}".lower()
+    if "git" in text or "fetch" in text or "pull" in text or "check" in text:
+        return "Avoid repeating the same Git action. Re-run git-preflight only after local state or branch assumptions change."
+    if "start" in text or "probe" in text or "debug" in text or "routing" in text or "backend" in text:
+        return "Do not rerun the same startup or probe flow unchanged. Switch to bug-hunter and inspect logs or configuration deltas first."
+    if "prod" in text or "release" in text or "deploy" in text:
+        return "Do not repeat the same production-facing action. Use senior-fullstack-engineer to fix the release blocker before retrying."
+    if "arch" in text or "audit" in text:
+        return "Narrow the architecture review scope before retrying the same audit path."
+    return "Avoid repeating the same failed action unchanged. Reduce scope, gather new evidence, or switch to the more specific core skill."
+
+
+def select_core_skills(
+    *,
+    task_hint: str,
+    safety: Dict[str, object],
+    connection: Dict[str, Dict[str, object]],
+    readiness: Dict[str, List[str]],
+) -> List[str]:
+    hint = task_hint.lower().strip()
+    selected: List[str] = []
+
+    if any(word in hint for word in ["git", "branch", "fetch", "pull", "status", "sync"]):
+        selected.append("git-preflight")
+    if any(word in hint for word in ["debug", "bug", "failure", "crash", "broken", "error", "auth", "routing"]):
+        selected.append("bug-hunter")
+    if any(word in hint for word in ["architecture", "audit", "review", "risk", "maintainability"]):
+        selected.append("codebase-auditor")
+    if any(word in hint for word in ["production", "release", "deploy", "hardening"]):
+        selected.append("senior-fullstack-engineer")
+    if any(word in hint for word in ["android", "compose", "retrofit", "fastapi", "fitgpt"]):
+        selected.append("fitgpt-stack-engineer")
+
+    if not selected:
+        if safety.get("git_blockers"):
+            selected.append("git-preflight")
+        elif not connection["local_backend_probe"]["ok"] or not connection["local_frontend_probe"]["ok"]:
+            selected.append("bug-hunter")
+        elif readiness["release_blockers"]:
+            selected.append("senior-fullstack-engineer")
+        else:
+            selected.append("fitgpt-dev-orchestrator")
+
+    ordered = [skill for skill in CORE_SYSTEM_SKILLS if skill in selected]
+    return ordered
 
 
 def bool_text(value: bool) -> str:
@@ -469,7 +608,16 @@ def choose_next_action(
     branch_matrix: Dict[str, object],
     connection: Dict[str, Dict[str, object]],
     readiness: Dict[str, List[str]],
+    recent_logs: Dict[str, object],
 ) -> str:
+    repeated = recent_logs.get("repeated_failures", [])
+    if isinstance(repeated, list) and repeated:
+        top = repeated[0]
+        if isinstance(top, dict):
+            action = str(top.get("action", "failed action"))
+            suggestion = str(top.get("suggestion", "Change approach before retrying."))
+            return f"Avoid repeating '{action}'. {suggestion}"
+
     blockers = list(safety.get("git_blockers", []))
     if blockers:
         return "Stop at safety gate. Resolve Git blockers before fetch, branch sync, or startup."
@@ -501,6 +649,8 @@ def choose_next_action(
 
 
 def print_report(
+    selected_skills: List[str],
+    recent_logs: Dict[str, object],
     safety: Dict[str, object],
     branch_matrix: Dict[str, object],
     env_state: Dict[str, object],
@@ -509,7 +659,27 @@ def print_report(
     next_action: str,
     debug_root_cause: Optional[str] = None,
 ) -> None:
-    print("Safety")
+    print("Selected Core Skill")
+    if selected_skills:
+        for skill in selected_skills:
+            print(f"- {skill}")
+    else:
+        print("- none")
+
+    print("\nRecent Failure Notes")
+    repeated = recent_logs.get("repeated_failures", [])
+    if isinstance(repeated, list) and repeated:
+        for item in repeated[:5]:
+            if not isinstance(item, dict):
+                continue
+            print(
+                f"- repeated failure: skill={item.get('skill')} action={item.get('action')} "
+                f"count={item.get('count')} suggestion={item.get('suggestion')}"
+            )
+    else:
+        print("- none")
+
+    print("\nSafety")
     print(f"- repo root: {safety['repo_root']}")
     print(f"- active branch: {safety['active_branch']}")
     print(f"- cleanliness: {'clean' if safety['clean'] else 'dirty'}")
@@ -783,27 +953,36 @@ def build_report(
     do_fetch: bool,
     timeout: int,
     include_frontend_probe: bool,
-) -> Tuple[Dict[str, object], Dict[str, object], Dict[str, object], Dict[str, Dict[str, object]], Dict[str, List[str]], str]:
+    task_hint: str,
+) -> Tuple[List[str], Dict[str, object], Dict[str, object], Dict[str, object], Dict[str, Dict[str, object]], Dict[str, List[str]], str]:
     safety = collect_safety(repo, do_fetch)
     stale = bool(do_fetch and not safety["fetch_performed"])
     branch_matrix = collect_branch_matrix(repo, stale=stale)
     env_state = collect_env_state(repo, mode)
     connection = collect_connection_checks(env_state, include_frontend=include_frontend_probe, timeout=timeout)
     readiness = production_readiness(repo, env_state, connection)
-    next_action = choose_next_action(safety, branch_matrix, connection, readiness)
-    return safety, branch_matrix, env_state, connection, readiness, next_action
+    recent_logs = read_recent_logs()
+    selected_skills = select_core_skills(
+        task_hint=task_hint,
+        safety=safety,
+        connection=connection,
+        readiness=readiness,
+    )
+    next_action = choose_next_action(safety, branch_matrix, connection, readiness, recent_logs)
+    return selected_skills, recent_logs, safety, branch_matrix, env_state, connection, readiness, next_action
 
 
 def cmd_report(args: argparse.Namespace) -> int:
     repo = resolve_repo_root(args.repo)
     repo_shape_errors = validate_repo_shape(repo)
 
-    safety, branch_matrix, env_state, connection, readiness, next_action = build_report(
+    selected_skills, recent_logs, safety, branch_matrix, env_state, connection, readiness, next_action = build_report(
         repo=repo,
         mode=args.mode,
         do_fetch=args.fetch,
         timeout=args.timeout,
         include_frontend_probe=args.frontend_probe,
+        task_hint=args.task,
     )
 
     if repo_shape_errors:
@@ -811,7 +990,7 @@ def cmd_report(args: argparse.Namespace) -> int:
         for problem in repo_shape_errors:
             safety["git_blockers"].append(problem)
 
-    print_report(safety, branch_matrix, env_state, connection, readiness, next_action)
+    print_report(selected_skills, recent_logs, safety, branch_matrix, env_state, connection, readiness, next_action)
     return 0
 
 
@@ -830,8 +1009,17 @@ def cmd_start(args: argparse.Namespace) -> int:
         env_state = collect_env_state(repo, args.mode)
         connection = collect_connection_checks(env_state, include_frontend=True, timeout=args.timeout)
         readiness = production_readiness(repo, env_state, connection)
-        next_action = "Stop and resolve safety blockers before starting local services."
+        recent_logs = read_recent_logs()
+        selected_skills = select_core_skills(
+            task_hint=args.task,
+            safety=safety,
+            connection=connection,
+            readiness=readiness,
+        )
+        next_action = choose_next_action(safety, branch_matrix, connection, readiness, recent_logs)
         print_report(
+            selected_skills,
+            recent_logs,
             safety,
             branch_matrix,
             env_state,
@@ -844,12 +1032,13 @@ def cmd_start(args: argparse.Namespace) -> int:
 
     startup = start_services(repo, timeout=args.timeout, check_only=args.check_only)
 
-    safety, branch_matrix, env_state, connection, readiness, next_action = build_report(
+    selected_skills, recent_logs, safety, branch_matrix, env_state, connection, readiness, next_action = build_report(
         repo=repo,
         mode=args.mode,
         do_fetch=False,
         timeout=args.timeout,
         include_frontend_probe=True,
+        task_hint=args.task,
     )
 
     debug_message = None
@@ -857,6 +1046,8 @@ def cmd_start(args: argparse.Namespace) -> int:
         debug_message = "; ".join(startup["errors"])
 
     print_report(
+        selected_skills,
+        recent_logs,
         safety,
         branch_matrix,
         env_state,
@@ -890,6 +1081,7 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--mode", choices=["auto", "local", "production"], default="auto")
     report.add_argument("--fetch", action="store_true", help="Fetch remotes if safe.")
     report.add_argument("--timeout", type=int, default=12, help="HTTP and process probe timeout in seconds.")
+    report.add_argument("--task", type=str, default="", help="Short task context for core skill selection.")
     report.add_argument(
         "--frontend-probe",
         action="store_true",
@@ -905,6 +1097,7 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--mode", choices=["auto", "local", "production"], default="auto")
     start.add_argument("--fetch", action="store_true", help="Fetch remotes if safe before startup.")
     start.add_argument("--timeout", type=int, default=120, help="Probe timeout window in seconds.")
+    start.add_argument("--task", type=str, default="", help="Short task context for core skill selection.")
     start.add_argument(
         "--check-only",
         action="store_true",

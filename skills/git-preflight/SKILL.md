@@ -5,215 +5,59 @@ description: Conservative Git pre-flight safety procedure used before any develo
 
 # Git Preflight Safety Checklist
 
-## File Role
-This skill defines a strict, read-first, safety-first Git pre-flight flow.
-Run it before coding, editing, committing, pulling, or branch operations.
+## Skill Group
+Core system skill
 
-## Operating Rules
-- Treat the task as a safety check, not a development task.
-- Do not run `git init`.
-- Do not create a new repository.
-- Do not run `git commit`.
-- Do not run `git push`.
-- Do not run `git merge`.
-- Do not switch branches automatically.
-- Do not overwrite local changes.
-- Do not modify project files.
-- If a requested or implied action would violate these rules, stop and ask.
+## Purpose
+Run a read-first Git safety check before development work or sync operations.
 
-## Default Assumptions
-- Assume the user wants the smallest safe sequence of Git inspection commands needed to confirm readiness.
-- If the repository is missing, ask for the repository URL before cloning.
-- If branch ownership is known, include it in final safety guidance.
-- If the active branch is detached or unclear, stop and ask instead of guessing.
+## Modes
+### Read / Analyze
+- Confirm the directory is a Git repository.
+- Identify the active branch and tracking state.
+- Inspect local changes before any network or branch action.
+- Report blockers and stop when the state is unsafe.
+
+### Execution
+- Only run safe inspection and sync commands that fit preflight.
+- Fetch and `pull --ff-only` only when the working tree is clean and the task calls for sync validation.
+- Do not clone, commit, push, merge, rebase, reset, stash, or switch branches unless the user explicitly asks.
+
+## Run Logging
+Record one Markdown log per run:
+```bash
+export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+export SKILL_LOGGER="$CODEX_HOME/skills/fitgpt-dev-orchestrator/scripts/skill_run_log.py"
+RUN_LOG=$(python3 "$SKILL_LOGGER" --skill "git-preflight" --action "check <repo-state>" --status started)
+# ...run the preflight...
+python3 "$SKILL_LOGGER" --skill "git-preflight" --action "check <repo-state>" --status success --log-file "$RUN_LOG"
+# on failure: use --status failure
+```
 
 ## Workflow
+1. Validate repository and `origin`
+2. Identify the current branch
+3. Inspect local state with `git status`
+4. If clean and relevant, run `git fetch origin`
+5. If still safe and relevant, run `git pull --ff-only origin <current-branch>`
+6. Confirm post-sync readiness
+7. Add any known branch ownership warning
 
-### 1. Validate Repository
-Check whether current working directory is inside a Git repository.
+## Stop Conditions
+- Not a Git repository
+- Missing or wrong `origin`
+- Detached HEAD
+- Modified, staged, or untracked files
+- Diverged history or non-fast-forward pull
+- Any action that would require a destructive or history-rewriting command
 
-If it is not a Git repository:
-- Ask for the repository URL.
-- Clone the repository.
-- Enter the project directory.
+## FitGPT Ownership Rule
+- If branch is `dieuni`, warn that it is comparison-only and should not be modified unless explicitly required.
 
-After confirming repository exists:
-- Verify `origin` remote is configured.
-- Report origin URL plainly.
-- If origin is missing or clearly wrong, stop and ask.
-
-Recommended checks:
-```bash
-git rev-parse --is-inside-work-tree
-git remote -v
-```
-
-### 2. Identify Current Branch
-Run:
-```bash
-git branch
-```
-
-Identify active branch from `*`.
-Explain whether it appears to be:
-- mainline branch such as `main` or `master`
-- feature branch
-- teammate-owned branch when project context defines ownership
-
-If HEAD is detached, or branch cannot be determined confidently, stop and ask.
-
-### 3. Inspect Local State Before Network Operations
-Run:
-```bash
-git status --short
-git status
-```
-
-If there are modified, staged, or untracked files:
-- List every affected file.
-- Group them as modified, staged, or untracked.
-- Stop and ask: `What would you like to do?`
-
-Present only these choices unless user asks for more:
-- keep changes
-- stash changes
-- discard changes
-
-Do not fetch or pull until user has decided.
-
-### 4. Synchronize With Origin in Safe Mode
-Run this step only when working tree is clean, or user explicitly chose how local changes are handled.
-
-Run:
-```bash
-git fetch origin
-git pull --ff-only origin <current-branch>
-```
-
-Never replace `--ff-only` with merge or rebase flow unless user explicitly changes requirement.
-
-If pull fails:
-- Explain exact reason in plain language.
-- Stop.
-
-Possible failure explanations:
-- local branch is behind and cannot fast-forward cleanly because of local state
-- local and remote branches have diverged
-- remote branch does not exist
-- pulling would require a merge commit or another non-fast-forward action
-
-### 5. Validate Post-Sync State
-Run:
-```bash
-git status
-```
-
-Confirm when true:
-- branch is up to date with `origin/<current-branch>`
-- working tree is clean
-- no staged or unstaged changes remain
-
-Explain what `up to date` means:
-- local branch tip matches remote tracking branch, so starting work now does not overwrite unseen remote commits
-
-### 6. Add Team Safety Context
-Use known ownership rules when provided by user or project context.
-
-For FitGPT:
-- If branch is `dieuni`, warn: `This is the frontend branch owned by another developer. Do not modify unless explicitly required.`
-- If branch is not `dieuni`, confirm: `You are working in your own branch, safe for backend/integration work.`
-
-If ownership rules are unknown for another repository:
-- state branch ownership is not defined
-- do not invent ownership
-
-### 7. Finish and Stop
-Provide concise readiness summary including:
-- repository status
-- current branch
-- sync status
-- safety confirmation
-
-If all checks pass, end with this exact sentence:
-`Environment is clean, synchronized, and safe. You can begin work.`
-
-Then stop and wait for user’s next command.
-Do not continue automatically into coding, edits, or branch changes.
-
-## Response Pattern
-Prefer short factual output in this order:
+## Output Shape
 1. Repository validation result
-2. Active branch and branch type
+2. Active branch and tracking state
 3. Local state result
 4. Sync result
-5. Team safety note
+5. Safety note
 6. Final readiness statement
-
-When stopping for user input:
-- be explicit about why progress is blocked
-- show safe options available
-
-## Failure Handling
-If any step fails, do not stop silently.
-
-You must:
-- Identify failure type.
-- Explain root cause in plain language.
-- Provide safe options.
-- Never auto-fix.
-
-### Common Failure Cases
-
-#### 1. Branch Is Behind Origin
-Explain:
-- Remote has commits local does not have.
-- Push will fail until branch is synchronized.
-
-Safe options:
-- `git pull --ff-only`
-- `git pull --rebase`
-
-Explain difference clearly:
-- `git pull --ff-only` updates local history only when Git can move straight forward without rewriting commits or creating merge commit.
-- `git pull --rebase` replays local commits on top of updated remote branch, rewriting local commit history while keeping linear timeline.
-
-#### 2. Non-Fast-Forward Push Rejected
-Explain:
-- Local history diverged from remote branch.
-
-Safe options:
-- pull, then push
-- rebase, then push
-
-Clarify:
-- rejection means Git will not overwrite remote history automatically.
-
-#### 3. Merge Conflict Risk
-Explain:
-- same files changed in multiple places and Git may not combine safely without manual review.
-
-Action:
-- Stop.
-- Ask user how to proceed.
-
-#### 4. Detached HEAD
-Explain:
-- repository is not currently on a branch.
-- new commits can become hard to find or be lost from normal branch history.
-
-Action:
-- Suggest creating a branch.
-
-#### 5. No Remote Origin
-Explain:
-- repository is not linked to a GitHub remote named `origin`.
-
-Action:
-- Ask for repository URL.
-
-## Final Safety Rule
-Never execute destructive commands:
-- no `git reset --hard`
-- no force push
-
-Always ask first.

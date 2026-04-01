@@ -3,65 +3,48 @@ name: "pdf"
 description: "Use when tasks involve reading, creating, or reviewing PDF files where rendering and layout matter; prefer visual checks by rendering pages (Poppler) and use Python tools such as `reportlab`, `pdfplumber`, and `pypdf` for generation and extraction."
 ---
 
-
 # PDF Skill
 
-## When to use
-- Read or review PDF content where layout and visuals matter.
-- Create PDFs programmatically with reliable formatting.
-- Validate final rendering before delivery.
+## Skill Group
+Utility skill
+
+## Purpose
+Read, create, or review PDFs with layout-aware validation.
+
+## Modes
+### Read / Analyze
+- Inspect PDF content and rendering quality.
+- Prefer page rendering over text extraction when layout matters.
+- Use text extraction only for quick checks or fallback review.
+
+### Execution
+- Use `reportlab` for generation and `pdfplumber` or `pypdf` for extraction or inspection.
+- Re-render updated PDFs before delivery when possible.
+- Keep intermediate files organized and disposable.
+
+## Run Logging
+Record one Markdown log per run:
+```bash
+export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+export SKILL_LOGGER="$CODEX_HOME/skills/fitgpt-dev-orchestrator/scripts/skill_run_log.py"
+RUN_LOG=$(python3 "$SKILL_LOGGER" --skill "pdf" --action "process <pdf-task>" --status started)
+# ...run the PDF task...
+python3 "$SKILL_LOGGER" --skill "pdf" --action "process <pdf-task>" --status success --log-file "$RUN_LOG"
+# on failure: use --status failure
+```
 
 ## Workflow
-1. Prefer visual review: render PDF pages to PNGs and inspect them.
-   - Use `pdftoppm` if available.
-   - If unavailable, install Poppler or ask the user to review the output locally.
-2. Use `reportlab` to generate PDFs when creating new documents.
-3. Use `pdfplumber` (or `pypdf`) for text extraction and quick checks; do not rely on it for layout fidelity.
-4. After each meaningful update, re-render pages and verify alignment, spacing, and legibility.
+1. Decide whether the task is review, edit, extraction, or generation.
+2. Render pages with `pdftoppm` when visual fidelity matters.
+3. Apply the requested PDF change with the appropriate Python tool.
+4. Re-check the final rendering and note any remaining layout risk.
 
-## Temp and output conventions
-- Use `tmp/pdfs/` for intermediate files; delete when done.
-- Write final artifacts under `output/pdf/` when working in this repo.
+## Conventions
+- Use `tmp/pdfs/` for intermediate files.
+- Write final artifacts under `output/pdf/` in this repo.
 - Keep filenames stable and descriptive.
 
-## Dependencies (install if missing)
-Prefer `uv` for dependency management.
-
-Python packages:
-```
-uv pip install reportlab pdfplumber pypdf
-```
-If `uv` is unavailable:
-```
-python3 -m pip install reportlab pdfplumber pypdf
-```
-System tools (for rendering):
-```
-# macOS (Homebrew)
-brew install poppler
-
-# Ubuntu/Debian
-sudo apt-get install -y poppler-utils
-```
-
-If installation isn't possible in this environment, tell the user which dependency is missing and how to install it locally.
-
-## Environment
-No required environment variables.
-
-## Rendering command
-```
-pdftoppm -png $INPUT_PDF $OUTPUT_PREFIX
-```
-
-## Quality expectations
-- Maintain polished visual design: consistent typography, spacing, margins, and section hierarchy.
-- Avoid rendering issues: clipped text, overlapping elements, broken tables, black squares, or unreadable glyphs.
-- Charts, tables, and images must be sharp, aligned, and clearly labeled.
-- Use ASCII hyphens only. Avoid U+2011 (non-breaking hyphen) and other Unicode dashes.
-- Citations and references must be human-readable; never leave tool tokens or placeholder strings.
-
-## Final checks
-- Do not deliver until the latest PNG inspection shows zero visual or formatting defects.
-- Confirm headers/footers, page numbering, and section transitions look polished.
-- Keep intermediate files organized or remove them after final approval.
+## Quality Rules
+- Preserve typography, spacing, margins, and legibility.
+- Avoid clipped text, overlapping elements, broken tables, and unreadable glyphs.
+- Use ASCII hyphens only.
