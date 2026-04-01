@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "install_root": "~/.codex/skills",
+  "groups": {
+    "core": [
+      "fitgpt-dev-orchestrator",
+      "git-preflight",
+      "codebase-auditor",
+      "bug-hunter",
+      "fitgpt-stack-engineer",
+      "senior-fullstack-engineer"
+    ],
+    "utility": [
+      "pdf",
+      "spreadsheet",
+      "sora",
+      "playwright",
+      "doc"
+    ]
+  },
+  "skills": {
+    "bug-hunter": {
+      "path": "skills/bug-hunter",
+      "group": "core"
+    },
+    "codebase-auditor": {
+      "path": "skills/codebase-auditor",
+      "group": "core"
+    },
+    "doc": {
+      "path": "skills/doc",
+      "group": "utility"
+    },
+    "fitgpt-dev-orchestrator": {
+      "path": "skills/fitgpt-dev-orchestrator",
+      "group": "core"
+    },
+    "fitgpt-stack-engineer": {
+      "path": "skills/fitgpt-stack-engineer",
+      "group": "core"
+    },
+    "git-preflight": {
+      "path": "skills/git-preflight",
+      "group": "core"
+    },
+    "pdf": {
+      "path": "skills/pdf",
+      "group": "utility"
+    },
+    "playwright": {
+      "path": "skills/playwright",
+      "group": "utility"
+    },
+    "senior-fullstack-engineer": {
+      "path": "skills/senior-fullstack-engineer",
+      "group": "core"
+    },
+    "sora": {
+      "path": "skills/sora",
+      "group": "utility"
+    },
+    "spreadsheet": {
+      "path": "skills/spreadsheet",
+      "group": "utility"
+    }
+  }
+}
